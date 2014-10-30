@@ -134,8 +134,8 @@ SELECT HOST,ROUND(SUM(USED_FIXED_PART_SIZE + USED_VARIABLE_PART_SIZE)/1024/1024)
 select host,table_name,round(sum(index_size)/1024/1024/1024,2) as "Row Tables Indexes" from sys.m_rs_indexes where host = 'hana01' group by host,table_name;
 SELECT host, round(ALLOCATION_LIMIT/1024/1024) AS "Allocation Limit MB" FROM PUBLIC.M_HOST_RESOURCE_UTILIZATION;
 select round((sum(HEAP_MEMORY_ALLOCATED_SIZE) + sum(SHARED_MEMORY_ALLOCATED_SIZE))/1024/1024/1024,2)as "Allocated Memory" from m_service_memory where host = 'hana01' group by host;
-
-alter table 
+-----HEAP_MEMORY_USAGE----------------
+SELECT host,port,category,round(exclusive_size_in_use/1024/1024/1024,1) as size_in_use FROM M_HEAP_MEMORY WHERE HOST = 'hana01' order by size_in_use desc;
 --RSHDBSTT--
 select Indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
 round ((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
@@ -160,29 +160,14 @@ service_name = 'indexserver' and
 host = 'hana01'
 order by host, port desc;
 
--- check quality of distribution by table count, partition count, record count, estimated size per host and port
-select 
-t.host, t.port, count(distinct t.table_name), count(t.table_name), round(sum(t.record_count),0), round(sum(t.estimated_max_memory_size_in_total),0)
-from m_cs_tables t
-where schema_name = 'SAPSR3'
-group by t.host, t.port
-order by t.host, t.port
-
--- check quality of distribution by table group types
-select 
-t.host, t.port, g.group_type, count(distinct t.table_name), count(t.table_name), round(sum(t.record_count),0), round(sum(t.estimated_max_memory_size_in_total),0)
-from table_groups g
-join m_cs_tables t
-on g.schema_name = t.schema_name
-and g.table_name = t.table_name
-where t.schema_name = 'SAPSR3'
-group by
-t.host, t.port, g.group_type
-order by group_type
 
 -------DELTA_MERGE-----------------------
 select * from M_DELTA_MERGE_STATISTICS where host = 'hnbwnode5';merge_history
-merge table <>;
+MERGE DELTA OF A WITH PARAMETERS('SMART_MERGE' = 'ON');
+MERGE DELTA OF A PART 1;
+MERGE DELTA OF TEST2 WITH PARAMETERS ('FORCED_MERGE' = 'ON');
+UPDATE TEST2 WITH PARAMETERS ('OPTIMIZE_COMPRESSION'='YES')
+
 ------COLUMN_TABLES_PART_SIZE_MEMORY_SIZE_IN_DELTA
 select * FROM "_SYS_STATISTICS"."HOST_COLUMN_TABLES_PART_SIZE" where host = 'hnbwnode5' and TABLE_NAME = '/BIC/000APG0';
 select * from M_DELTA_MERGE_STATISTICS where host = 'hnbwnode5' AND TABLE_NAME = '/BIC/000APG0';
@@ -244,18 +229,7 @@ update _SYS_STATISTICS.STATISTICS_SCHEDULE set STATUS='Inactive' where ID=5034ï»
 ALTER SYSTEM ALTER CONFIGURATION ('daemon.ini', 'host', '<host name>') SET ('xsengine','instances') = '1' WITH RECONFIGURE
 ALTER SYSTEM ALTER CONFIGURATION ('daemon.ini', 'host', 'suse2') UNSET ('preprocessor','instances')
 alter system alter configuration ('indexserver.ini','SYSTEM') SET ('table_redist','all_moves_physical') = 'true' WITH RECONFIGURE;
-
-select * from TABLE_GROUPS;
-select * from _SYS_RT.TABLE_PLACEMENT order by MIN_ROWS_FOR_PARTITIONING desc;
-
-SELECT TOP 1000 * FROM "SAPSR3"."SWPM_REORG_ESTIMATED_RECORDS"
-
---
-SELECT * FROM M_CS_TABLES WHERE TABLE_NAME = '/BIC/000APG0';
-select * from M_SQL_PLAN_CACHE where PLAN_ID = ;
-
-select * from "SYS"."M_CS_TABLES" 
-
+-----------------------------------
 select * from "_SYS_STATISTICS"."STATISTICS_ALERT_LAST_CHECK_INFORMATION"
 select TOP 10 * from m_HEAP_MEMORY ORDER BY INCLUSIVE_SIZE_IN_USE desc;
 call GRANT_ACTIVATED_ANALYTICAL_PRIVILEGE ('_SYS_BI_CP_ALL', 'I069650');
@@ -268,7 +242,7 @@ DELETE FROM "_SYS_XS"."RUNTIME_CONFIGURATION" WHERE PACKAGE_ID = 'Molly';
 UPDATE "_SYS_XS"."RUNTIME_CONFIGURATION" SET CONFIGURATION = '{"authentication": [{"method": "Form"},{"method": "Basic"}]}';
 SELECT CONFIGURATION FROM "_SYS_XS"."RUNTIME_CONFIGURATION";
 SELECT * FROM "_SYS_XS"."RUNTIME_CONFIGURATION";
---Privilege---
+----Privilege---
 select * from "PUBLIC"."PRIVILEGES" order by TYPE;
 select * from "PUBLIC"."STRUCTURED_PRIVILEGES";
 select * from "PUBLIC"."ROLES";
@@ -282,7 +256,7 @@ select * from GRANTED_ROLES WHERE ROLE_NAME LIKE '%SUPPORT'
 
 SELECT * FROM EFFECTIVE_PRIVILEGES WHERE USER_NAME = '<user>' AND OBJECT_TYPE = 'ANALYTICALPRIVILEGE';
 
---Audit Log---
+-----Audit Log---
 select * from audit_log 
 --where section like '%sqltrace%' 
 --and statement_string like '%server%'
@@ -490,8 +464,7 @@ grant select on schema MINGTU_XS to _SYS_REPO with grant option;
 revoke select on schema "MingTu_XS" from _SYS_REPO with grant option;
 grant select on schema Test_delete to i073019 with grant option;
 
------HEAP_MEMORY_USAGE----------------
-SELECT host,port,category,round(exclusive_size_in_use/1024/1024/1024,1) as size_in_use FROM M_HEAP_MEMORY WHERE HOST = 'hana01' order by size_in_use desc;
+
 -----ROW_TABLE-------------------------
 ;41 Row Store Size
 select indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
@@ -557,10 +530,30 @@ left outer join sys.m_table_virtual_files_ tvf on (cst.table_oid
 tvf.name is null
  merge delta of "WAHTSCHEMA"."HIVO_CBR_ALL_PREORDERED_RECS"
 -------Landscape Redistribution----------------------------------------------------------------
-select * from "PUBLIC"."REORG_OVERVIEW" ;
-select * from "SYS"."REORG_STEPS" WHERE REORG_ID = 5 and new_host = 'hana09' order by NEW_HOST
-select distinct reorg_id from "SYS"."REORG_STEPS";
-select * from SYS.REORG_PLAN
+
+-----Table Placement------------
+select * from TABLE_GROUPS;
+select * from _SYS_RT.TABLE_PLACEMENT order by MIN_ROWS_FOR_PARTITIONING desc;
+
+-- check quality of distribution by table count, partition count, record count, estimated size per host and port
+select 
+t.host, t.port, count(distinct t.table_name), count(t.table_name), round(sum(t.record_count),0), round(sum(t.estimated_max_memory_size_in_total),0)
+from m_cs_tables t
+where schema_name = 'SAPSR3'
+group by t.host, t.port
+order by t.host, t.port
+
+-- check quality of distribution by table group types
+select 
+t.host, t.port, g.group_type, count(distinct t.table_name), count(t.table_name), round(sum(t.record_count),0), round(sum(t.estimated_max_memory_size_in_total),0)
+from table_groups g
+join m_cs_tables t
+on g.schema_name = t.schema_name
+and g.table_name = t.table_name
+where t.schema_name = 'SAPSR3'
+group by
+t.host, t.port, g.group_type
+order by group_type
 
 	-----TABLE_GROUPS------------------------------
 select top 10 l.table_name,l.part_id,l.location,g.group_type,g.group_name from M_TABLE_LOCATIONS l join SYS.TABLE_GROUPS g ON L.TABLE_NAME = g.TABLE_NAME and l.schema_name = g.schema_name 
@@ -576,6 +569,10 @@ select * from _SYS_RT.TABLE_PLACEMENT
 select * from "PUBLIC"."REORG_OVERVIEW" ;
 select NEW_HOST,count(*) from "SYS"."REORG_STEPS" WHERE REORG_ID != 1 group by NEW_HOST order by NEW_HOST
 select distinct reorg_id from "SYS"."REORG_STEPS";
+select * from "PUBLIC"."REORG_OVERVIEW" ;
+select * from "SYS"."REORG_STEPS" WHERE REORG_ID = 5 and new_host = 'hana09' order by NEW_HOST
+select distinct reorg_id from "SYS"."REORG_STEPS";
+select * from SYS.REORG_PLAN
 
 ---------BW on HANA-----------------
 select a.table_name,a.partition_spec,b.record_count,b.create_time from tables a join m_cs_tables b on a.table_name = b.table_name 
@@ -583,7 +580,6 @@ join table_groups c on a.table_name = c.table_name
 where a.table_name like '/BI%/B%' and a.partition_spec like 'HASH 1%' and record_count > 40000000 and subtype = 'CHANGE_LOG'
 order by 
 record_count desc;
-
 
 ---------SQL-BASED_Dynamic Analytic Privilege--------------------------------------------
 ;Creation of base table to store user-specific filter strings
