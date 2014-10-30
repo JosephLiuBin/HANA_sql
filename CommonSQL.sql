@@ -458,13 +458,6 @@ from (
 	)
 group by host,state_name
 
-----------------------------------------------
-Create schema Test_delete;
-grant select on schema MINGTU_XS to _SYS_REPO with grant option;
-revoke select on schema "MingTu_XS" from _SYS_REPO with grant option;
-grant select on schema Test_delete to i073019 with grant option;
-
-
 -----ROW_TABLE-------------------------
 ;41 Row Store Size
 select indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
