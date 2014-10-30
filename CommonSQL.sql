@@ -1,15 +1,3 @@
-EXPORT "SFLIGHT"."*" AS binary into '/usr/sap/HD5/HDB05/work/ex_re' WITH replace threads 20;
-select * from  #EXPORT_RESULT;
-select * from sflight.SBOOKOUT
-
-select * from "SFLIGHT"."basketball.data::comments"
-
-grant REPO.MODIFY_CHANGE, 
-REPO.MODIFY_OWN_CONTRIBUTION, REPO.MODIFY_FOREIGN_CONTRIBUTION to I059463;
-
-grant select on schema SFLIGHT to I058712;
-
-
 
 ------INTERNAL_ROLE-------------
 CREATE ROLE INTERNAL_ROLE;
@@ -48,7 +36,6 @@ BEGIN
 		SIGNAL USER_EXIST SET MESSAGE_TEXT = 'User Exists';
 	end if;
 END; 
-
 
 drop user TESTCO cascade;
 call CREATE_INTERNAL_USER('I015409');
@@ -207,11 +194,13 @@ select * from "SYS"."M_CS_UNLOADS" where table_name = '/BIC/000APG0';
 select client_PID from "_SYS_STATISTICS"."HOST_UNCOMMITTED_WRITE_TRANSACTION" where TRANSACTION_ID = '233' and CLIENT_PID = '15267'order by SNAPSHOT_ID DESC;
 select * from M_TRANSACTIONS where TRANSACTION_ID = '233' and host = 'hnbwnode5'
 select * from M_CONNECTIONS where host = 'hnbwnode5' and connection_ID = '1132509'
----import data---------------------
+---Export & Import---------------------
 EXPORT "SYSTEM"."TDEVC" AS BINARY INTO '/tmp/frank_wang/' WITH REPLACE SCRAMBLE THREADS 10;
+select * from  #EXPORT_RESULT;
 SELECT * FROM "PUBLIC"."M_EXPORT_BINARY_STATUS";running
 select * from #EXPORT_RESULT;session-local
 IMPORT "SYSTEM"."*"  from '/tmp/frank_wang/' with RENAME SCHEMA "SYSTEM" TO "I303173" FAIL ON INVALID DATA at location '<host>:3xx03'; change schema
+select * from  #IMPORT_RESULT;
 SELECT * FROM "PUBLIC"."M_IMPORT_BINARY_STATUS";running
 select * from #IMPORT_RESULT;
 IMPORT SCAN '/tmp/test_trace/export';
