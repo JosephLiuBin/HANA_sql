@@ -136,6 +136,17 @@ SELECT host, round(ALLOCATION_LIMIT/1024/1024) AS "Allocation Limit MB" FROM PUB
 select round((sum(HEAP_MEMORY_ALLOCATED_SIZE) + sum(SHARED_MEMORY_ALLOCATED_SIZE))/1024/1024/1024,2)as "Allocated Memory" from m_service_memory where host = 'hana01' group by host;
 -----HEAP_MEMORY_USAGE----------------
 SELECT host,port,category,round(exclusive_size_in_use/1024/1024/1024,1) as size_in_use FROM M_HEAP_MEMORY WHERE HOST = 'hana01' order by size_in_use desc;
+--Historical Data for HEAP MEMORY--
+SELECT
+    HA.SERVER_TIMESTAMP,
+    HA.CATEGORY,
+    HA.HOST,
+    HA.PORT,
+    HA.EXCLUSIVE_SIZE_IN_USE
+FROM
+    _SYS_STATISTICS.HOST_HEAP_ALLOCATORS HA
+where category like '%ersion' and host = 'bp0h01' and port = '30003'
+order by SERVER_TIMESTAMP desc
 --RSHDBSTT--
 select Indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
 round ((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
