@@ -151,8 +151,8 @@ order by SERVER_TIMESTAMP desc
 select Indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
 round ((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
 round ((memory_used_cs_tables/1024/1024/1024),1) as "USED_MEMORY_CS_TABLES_GB",
-round ((memory_allocated_rs_tables/1024/1024/1024),1) as "USED_MEMORY_RS_TABLES_GB",
-round ((memory_allocated_rs_indexes/1024/1024/1024),1) as "USED_MEMORY_RS_INDEX_GB"
+round ((memory_used_rs_tables/1024/1024/1024),1) as "USED_MEMORY_RS_TABLES_GB",
+round ((memory_used_rs_indexes/1024/1024/1024),1) as "USED_MEMORY_RS_INDEX_GB"
 from 
 (select indexserver_actual_role, a.host, port, service_name from sys.m_services a left join M_landscape_host_configuration b on a.host = b.host 
 group by indexserver_actual_role, a.host, port, service_name)
@@ -161,16 +161,15 @@ left outer join
 sum(Memory_size_in_total) as memory_used_cs_tables  
 from sys.m_cs_tables group by host, port) on (host = h1 and port = p1)
 left outer join
-(select host as h2, port as p2, sum(allocated_size) as memory_allocated_rs_tables from sys.m_rs_memory where category = 'TABLE'  group by host, port) on (host = h2 and port = p2)
+(select host as h2, port as p2, sum(used_size) as memory_used_rs_tables from sys.m_rs_memory where category = 'TABLE'  group by host, port) on (host = h2 and port = p2)
 left outer join 
-(select host as h3, port as p3, sum(allocated_size) as memory_allocated_rs_indexes from sys.m_rs_memory where category = 'CPBTREE' or category = 'BTREE' group by host, port) on (host = h3 and port = p3)
+(select host as h3, port as p3, sum(used_size) as memory_used_rs_indexes from sys.m_rs_memory where category = 'CPBTREE' or category = 'BTREE' group by host, port) on (host = h3 and port = p3)
 left outer join 
-(select host as h7, port as p7, sum(total_memory_used_size) as memory_used from sys.m_service_memory group by host, port) on (host = h7 and port = p7) 
+(select host as h7,instance_total_memory_used_size as memory_used from sys.m_host_resource_utilization ) on (host = h7) 
 where
 service_name = 'indexserver' and 
-host = 'hana01'
+host = 'bp0h01'
 order by host, port desc;
-
 
 -------DELTA_MERGE-----------------------
 select * from M_DELTA_MERGE_STATISTICS where host = 'hnbwnode5';merge_history
