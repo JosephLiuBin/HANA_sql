@@ -10,6 +10,7 @@ Call "_SYS_REPO"."GRANT_ACTIVATED_ROLE"('sap.hana.admin.roles::Monitoring','INTE
 Call "_SYS_REPO"."GRANT_ACTIVATED_ROLE"('sap.sop.sopfnd.catalogue::SAPSOP_DEBUG','INTERNAL_ROLE');Check SYS view
 Call "_SYS_REPO"."GRANT_ACTIVATED_ROLE"('sap.hana.xs.lm.roles::Display','INTERNAL_ROLE');LM Display
 Call "_SYS_REPO"."GRANT_ACTIVATED_ROLE"('sap.hba.explorer.roles::Developer','I074463');HANA Live
+grant select on schema SYSTEM TO INTERNAL_ROLE WITH GRANT OPTION
 grant update on schema _SYS_STATISTICS to INTERNAL_ROLE;
 ;additional privilege;
 grant import to I302273;
@@ -267,6 +268,8 @@ select * from GRANTED_ROLES WHERE ROLE_NAME LIKE '%SUPPORT'
 SELECT * FROM EFFECTIVE_PRIVILEGES WHERE USER_NAME = '<user>' AND OBJECT_TYPE = 'ANALYTICALPRIVILEGE';
 
 -----Audit Log---
+grant AUDIT ADMIN to I310503;
+grant AUDIT OPERATOR to I310503
 select * from audit_log 
 --where section like '%sqltrace%' 
 --and statement_string like '%server%'
