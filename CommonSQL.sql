@@ -146,8 +146,10 @@ SELECT
     HA.EXCLUSIVE_SIZE_IN_USE
 FROM
     _SYS_STATISTICS.HOST_HEAP_ALLOCATORS HA
-where category like '%ersion' and host = 'bp0h01' and port = '30003'
+where category like '%Cpb%' and host = 'bp0h01' and port = '30003'	/*Versions*/
 order by SERVER_TIMESTAMP desc
+--M_RS_MEMORY--
+select * from sys.m_rs_memory where category = 'CPBTREE' or category = 'BTREE'
 --RSHDBSTT--
 select Indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
 round ((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
@@ -162,9 +164,9 @@ left outer join
 sum(Memory_size_in_total) as memory_used_cs_tables  
 from sys.m_cs_tables group by host, port) on (host = h1 and port = p1)
 left outer join
-(select host as h2, port as p2, sum(used_size) as memory_used_rs_tables from sys.m_rs_memory where category = 'TABLE'  group by host, port) on (host = h2 and port = p2)
+(select host as h2, port as p2, sum(allocated_size) as memory_used_rs_tables from sys.m_rs_memory where category = 'TABLE'  group by host, port) on (host = h2 and port = p2)
 left outer join 
-(select host as h3, port as p3, sum(used_size) as memory_used_rs_indexes from sys.m_rs_memory where category = 'CPBTREE' or category = 'BTREE' group by host, port) on (host = h3 and port = p3)
+(select host as h3, port as p3, sum(allocated_size) as memory_used_rs_indexes from sys.m_rs_memory where category = 'CPBTREE' or category = 'BTREE' group by host, port) on (host = h3 and port = p3)
 left outer join 
 (select host as h7,instance_total_memory_used_size as memory_used from sys.m_host_resource_utilization ) on (host = h7) 
 where
