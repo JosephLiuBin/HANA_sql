@@ -201,7 +201,7 @@ UPDATE TEST2 WITH PARAMETERS ('OPTIMIZE_COMPRESSION'='YES')
 SELECT host,port,category,round(exclusive_size_in_use/1024/1024/1024,1) as size_in_use FROM M_HEAP_MEMORY WHERE HOST = 'hana01' order by size_in_use desc;
 --Historical Data for HEAP MEMORY--
 SELECT
-	to_timestamp(HA.SERVER_TIMESTAMP,'dd.mm.yyyy:hh24:mi:ss') as MyDate,
+	to_char(HA.SERVER_TIMESTAMP,'dd.mm.yyyy:hh24:mi:ss') as MyDate,
     HA.CATEGORY,
     HA.HOST,
     HA.PORT,
@@ -209,7 +209,7 @@ SELECT
 FROM
     _SYS_STATISTICS.HOST_HEAP_ALLOCATORS HA
 where category like '%Cpb%' and host = 'bp0h01' and port = '30003'	
-order by SERVER_TIMESTAMP 
+order by SERVER_TIMESTAMP desc
 --desc;
 --M_RS_MEMORY--
 select * from sys.m_rs_memory where category = 'CPBTREE' and host = 'bp0h01' and port = '30003'
