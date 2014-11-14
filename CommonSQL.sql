@@ -117,6 +117,26 @@ grant select on schema <> to _SYS_REPO with grant option;before activation
 SELECT * FROM "_SYS_BIC"."GOME_TRAN.ABAP4HANA/AT_TEST"
 ------Disk Usage--------------------
 select * from "SYS"."M_DISKS"
+-----Transaction--------------
+/*Long-lived cursors – result from below query*/
+SELECT P.HOST, P.PORT, C.LOGICAL_CONNECTION_ID, C.CLIENT_HOST, C.CLIENT_PID,
+P.STATEMENT_STATUS, P.STATEMENT_STRING, SECONDS_BETWEEN(P.LAST_EXECUTED_TIME, CURRENT_TIMESTAMP) IDLE_TIME, P.START_MVCC_TIMESTAMP 
+   FROM M_PREPARED_STATEMENTS P, M_CONNECTIONS C 
+WHERE P.HOST = C.HOST AND P.PORT = C.PORT AND P.CONNECTION_ID = C.CONNECTION_ID AND C.CONNECTION_ID > 0 
+   AND SECONDS_BETWEEN(P.LAST_EXECUTED_TIME, CURRENT_TIMESTAMP) > 0 
+   AND P.STATEMENT_STATUS <> 'NONE'    
+
+/*Long-living serializable tranactions  – result from below query*/
+SELECT T.HOST, T.PORT, C.LOGICAL_CONNECTION_ID, C.CLIENT_HOST, C.CLIENT_PID, T.TRANSACTION_ID, T.UPDATE_TRANSACTION_ID, SECONDS_BETWEEN(T.START_TIME, CURRENT_TIMESTAMP) TOTAL_TIME, T.MIN_MVCC_SNAPSHOT_TIMESTAMP 
+   FROM M_TRANSACTIONS T, M_CONNECTIONS C
+WHERE T.TRANSACTION_STATUS = 'ACTIVE' AND T.TRANSACTION_TYPE = 'USER TRANSACTION' AND T.CONNECTION_ID = C.CONNECTION_ID
+   AND T.ISOLATION_LEVEL <> 'READ COMMITTED' AND SECONDS_BETWEEN(T.START_TIME, CURRENT_TIMESTAMP) > 0
+
+/*Long-living uncommitted write transactions  – result from below query*/
+SELECT T.HOST, T.PORT, C.LOGICAL_CONNECTION_ID, C.CLIENT_HOST, C.CLIENT_PID, T.TRANSACTION_ID, T.UPDATE_TRANSACTION_ID, SECONDS_BETWEEN(T.START_TIME, CURRENT_TIMESTAMP) TOTAL_TIME, T.MIN_MVCC_SNAPSHOT_TIMESTAMP
+   FROM M_TRANSACTIONS T, M_CONNECTIONS C
+WHERE T.CONNECTION_ID=C.CONNECTION_ID AND T.TRANSACTION_STATUS='ACTIVE' AND T.TRANSACTION_TYPE='USER TRANSACTION' AND T.UPDATE_TRANSACTION_ID > 0
+   AND SECONDS_BETWEEN(T.START_TIME, CURRENT_TIMESTAMP) > 0
 ------cancle session/thread----
 SELECT CONNECTION_ID FROM "SYS"."M_CONNECTIONS" WHERE CREATOR_THREAD_ID=34289;
 ALTER SYSTEM CANCEL SESSION '204531';
@@ -129,12 +149,54 @@ select * from M_TRANSACTIONS where connection_id = '2141292'
 select * from "_SYS_STATISTICS"."HOST_LONG_RUNNING_STATEMENTS";
 select * from QUERY_PLANS;
 select * from m_service_threads where thread_type like '%Backup%'
+----Garbage Collection-------
+select * from M_MVCC_TABLES;
+select * from M_RS_TABLE_VERSION_STATISTICS;
+select * from M_TABLE_SNAPSHOTS;
 ------memory usage check-----
 SELECT HOST,ROUND(SUM(MEMORY_SIZE_IN_TOTAL)/1024/1024) AS "Column Tables MB Used" FROM M_CS_TABLES group by HOST order by host;
 SELECT HOST,ROUND(SUM(USED_FIXED_PART_SIZE + USED_VARIABLE_PART_SIZE)/1024/1024) AS "Row Tables MB Used" FROM M_RS_TABLES group by HOST order by host;
 select host,table_name,round(sum(index_size)/1024/1024/1024,2) as "Row Tables Indexes" from sys.m_rs_indexes where host = 'hana01' group by host,table_name;
 SELECT host, round(ALLOCATION_LIMIT/1024/1024) AS "Allocation Limit MB" FROM PUBLIC.M_HOST_RESOURCE_UTILIZATION;
 select round((sum(HEAP_MEMORY_ALLOCATED_SIZE) + sum(SHARED_MEMORY_ALLOCATED_SIZE))/1024/1024/1024,2)as "Allocated Memory" from m_service_memory where host = 'hana01' group by host;
+-----ROW_TABLE-------------------------
+;41 Row Store Size
+select indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
+round(rs_data_size/1024/1024/1024,1) as "RS_DATA_GB", 
+round(rs_index_size/1024/1024/1024,1) as "RS_INDEX_GB", 
+round((rs_data_size+rs_index_size)/1024/1024/1024,1) as "RS_TABLES_TOTAL_SIZE_GB",
+table_name
+from
+(select indexserver_actual_role, a.host, port,a.table_name, sum(allocated_fixed_part_size+allocated_variable_part_size) as rs_data_size from sys.m_rs_tables a 
+left join M_landscape_host_configuration b on a.host = b.host where table_name = 'RSPCLOGS' group by indexserver_actual_role, a.host, port, a.table_name
+)
+left outer join
+(select host as h0, port as p0, sum(index_size) as rs_index_size from sys.m_rs_indexes group by host, port) on (host = h0 and port = p0)
+left outer join 
+(select  host as h1, port as p1, service_name from M_Services) on (host = h1 and port = p1)
+order by host, port;
+;ROW TABLE INDEX SIZE
+SELECT TABLE_NAME,ROUND(IFNULL(SUM(INDEX_SIZE), 0) / 1024 / 1024 / 1024,2) AS INDEX_MEM_GB FROM M_RS_INDEXES
+WHERE HOST = 'bp0h01' and port = '30003' and schema_name = 'SAPSR3' GROUP BY TABLE_NAME ORDER BY INDEX_MEM_GB DESC limit 10;
+
+------COLUMN_TABLES--------------
+select * FROM "_SYS_STATISTICS"."HOST_COLUMN_TABLES_PART_SIZE" where host = 'hnbwnode5' and TABLE_NAME = '/BIC/000APG0';
+select * from M_DELTA_MERGE_STATISTICS where host = 'hnbwnode5' AND TABLE_NAME = '/BIC/000APG0';
+SELECT * FROM M_CS_TABLES WHERE TABLE_NAME = '/BIC/000APG0';
+select top 1 * FROM "_SYS_STATISTICS"."HOST_COLUMN_TABLES_PART_SIZE" where host = 'hnbwnode5' and TABLE_NAME = '/BIC/000APG0' order by SERVER_TIMESTAMP DESC;
+SELECT TOP 10 * from M_CS_TABLES ORDER BY MEMORY_SIZE_IN_DELTA DESC;
+select * from "SYS"."TABLES" where table_name = '/BIC/000APG0';
+select * from "SYS"."M_CS_UNLOADS" where table_name = '/BIC/000APG0';
+select client_PID from "_SYS_STATISTICS"."HOST_UNCOMMITTED_WRITE_TRANSACTION" where TRANSACTION_ID = '233' and CLIENT_PID = '15267'order by SNAPSHOT_ID DESC;
+select * from M_TRANSACTIONS where TRANSACTION_ID = '233' and host = 'hnbwnode5'
+select * from M_CONNECTIONS where host = 'hnbwnode5' and connection_ID = '1132509'
+-------DELTA_MERGE-----------------------
+select * from M_DELTA_MERGE_STATISTICS where host = 'hnbwnode5';merge_history
+MERGE DELTA OF A WITH PARAMETERS('SMART_MERGE' = 'ON');
+MERGE DELTA OF A PART 1;
+MERGE DELTA OF TEST2 WITH PARAMETERS ('FORCED_MERGE' = 'ON');
+UPDATE TEST2 WITH PARAMETERS ('OPTIMIZE_COMPRESSION'='YES')
+
 -----HEAP_MEMORY_USAGE----------------
 SELECT host,port,category,round(exclusive_size_in_use/1024/1024/1024,1) as size_in_use FROM M_HEAP_MEMORY WHERE HOST = 'hana01' order by size_in_use desc;
 --Historical Data for HEAP MEMORY--
@@ -143,13 +205,13 @@ SELECT
     HA.CATEGORY,
     HA.HOST,
     HA.PORT,
-    HA.EXCLUSIVE_SIZE_IN_USE
+    ROUND(HA.EXCLUSIVE_SIZE_IN_USE/1024/1024/1024,2) AS EXCLUSIVE_SIZE_IN_USE_GB 
 FROM
     _SYS_STATISTICS.HOST_HEAP_ALLOCATORS HA
-where category like '%Cpb%' and host = 'bp0h01' and port = '30003'	/*Versions*/
+where category like '%Cpb%' and host = 'bp0h01' and port = '30003'	
 order by SERVER_TIMESTAMP desc
 --M_RS_MEMORY--
-select * from sys.m_rs_memory where category = 'CPBTREE' or category = 'BTREE'
+select * from sys.m_rs_memory where category = 'CPBTREE' and host = 'bp0h01' and port = '30003'
 --RSHDBSTT--
 select Indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
 round ((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
@@ -174,24 +236,7 @@ service_name = 'indexserver' and
 host = 'bp0h01'
 order by host, port desc;
 
--------DELTA_MERGE-----------------------
-select * from M_DELTA_MERGE_STATISTICS where host = 'hnbwnode5';merge_history
-MERGE DELTA OF A WITH PARAMETERS('SMART_MERGE' = 'ON');
-MERGE DELTA OF A PART 1;
-MERGE DELTA OF TEST2 WITH PARAMETERS ('FORCED_MERGE' = 'ON');
-UPDATE TEST2 WITH PARAMETERS ('OPTIMIZE_COMPRESSION'='YES')
 
-------COLUMN_TABLES_PART_SIZE_MEMORY_SIZE_IN_DELTA
-select * FROM "_SYS_STATISTICS"."HOST_COLUMN_TABLES_PART_SIZE" where host = 'hnbwnode5' and TABLE_NAME = '/BIC/000APG0';
-select * from M_DELTA_MERGE_STATISTICS where host = 'hnbwnode5' AND TABLE_NAME = '/BIC/000APG0';
-SELECT * FROM M_CS_TABLES WHERE TABLE_NAME = '/BIC/000APG0';
-select top 1 * FROM "_SYS_STATISTICS"."HOST_COLUMN_TABLES_PART_SIZE" where host = 'hnbwnode5' and TABLE_NAME = '/BIC/000APG0' order by SERVER_TIMESTAMP DESC;
-SELECT TOP 10 * from M_CS_TABLES ORDER BY MEMORY_SIZE_IN_DELTA DESC;
-select * from "SYS"."TABLES" where table_name = '/BIC/000APG0';
-select * from "SYS"."M_CS_UNLOADS" where table_name = '/BIC/000APG0';
-select client_PID from "_SYS_STATISTICS"."HOST_UNCOMMITTED_WRITE_TRANSACTION" where TRANSACTION_ID = '233' and CLIENT_PID = '15267'order by SNAPSHOT_ID DESC;
-select * from M_TRANSACTIONS where TRANSACTION_ID = '233' and host = 'hnbwnode5'
-select * from M_CONNECTIONS where host = 'hnbwnode5' and connection_ID = '1132509'
 ---Export & Import---------------------
 EXPORT "SYSTEM"."TDEVC" AS BINARY INTO '/tmp/frank_wang/' WITH REPLACE SCRAMBLE THREADS 10;
 select * from  #EXPORT_RESULT;
@@ -473,22 +518,6 @@ from (
 	)
 group by host,state_name
 
------ROW_TABLE-------------------------
-;41 Row Store Size
-select indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
-round(rs_data_size/1024/1024/1024,1) as "RS_DATA_GB", 
-round(rs_index_size/1024/1024/1024,1) as "RS_INDEX_GB", 
-round((rs_data_size+rs_index_size)/1024/1024/1024,1) as "RS_TABLES_TOTAL_SIZE_GB",
-table_name
-from
-(select indexserver_actual_role, a.host, port,a.table_name, sum(allocated_fixed_part_size+allocated_variable_part_size) as rs_data_size from sys.m_rs_tables a 
-left join M_landscape_host_configuration b on a.host = b.host where table_name = 'RSPCLOGS' group by indexserver_actual_role, a.host, port, a.table_name
-)
-left outer join
-(select host as h0, port as p0, sum(index_size) as rs_index_size from sys.m_rs_indexes group by host, port) on (host = h0 and port = p0)
-left outer join 
-(select  host as h1, port as p1, service_name from M_Services) on (host = h1 and port = p1)
-order by host, port;
 
 -----CONNECTIONS-----------------------
 select C.HOST, C.CONNECTION_ID,C.CLIENT_PID,PS.STATEMENT_STRING
