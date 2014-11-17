@@ -160,7 +160,7 @@ select host,table_name,round(sum(index_size)/1024/1024/1024,2) as "Row Tables In
 SELECT host, round(ALLOCATION_LIMIT/1024/1024) AS "Allocation Limit MB" FROM PUBLIC.M_HOST_RESOURCE_UTILIZATION;
 select round((sum(HEAP_MEMORY_ALLOCATED_SIZE) + sum(SHARED_MEMORY_ALLOCATED_SIZE))/1024/1024/1024,2)as "Allocated Memory" from m_service_memory where host = 'hana01' group by host;
 -----ROW_TABLE-------------------------
-;41 Row Store Size
+;41 Row Store Size for single table 
 select indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
 round(rs_data_size/1024/1024/1024,1) as "RS_DATA_GB", 
 round(rs_index_size/1024/1024/1024,1) as "RS_INDEX_GB", 
@@ -213,29 +213,33 @@ order by SERVER_TIMESTAMP desc
 --desc;
 --M_RS_MEMORY--
 select * from sys.m_rs_memory where category = 'CPBTREE' and host = 'bp0h01' and port = '30003'
---RSHDBSTT--
-select Indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
-round ((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
-round ((memory_used_cs_tables/1024/1024/1024),1) as "USED_MEMORY_CS_TABLES_GB",
-round ((memory_used_rs_tables/1024/1024/1024),1) as "USED_MEMORY_RS_TABLES_GB",
-round ((memory_used_rs_indexes/1024/1024/1024),1) as "USED_MEMORY_RS_INDEX_GB"
-from 
-(select indexserver_actual_role, a.host, port, service_name from sys.m_services a left join M_landscape_host_configuration b on a.host = b.host 
-group by indexserver_actual_role, a.host, port, service_name)
-left outer join
-(select host as h1, port as p1, 
-sum(Memory_size_in_total) as memory_used_cs_tables  
-from sys.m_cs_tables group by host, port) on (host = h1 and port = p1)
-left outer join
-(select host as h2, port as p2, sum(allocated_size) as memory_used_rs_tables from sys.m_rs_memory where category = 'TABLE'  group by host, port) on (host = h2 and port = p2)
-left outer join 
-(select host as h3, port as p3, sum(allocated_size) as memory_used_rs_indexes from sys.m_rs_memory where category = 'CPBTREE' or category = 'BTREE' group by host, port) on (host = h3 and port = p3)
-left outer join 
-(select host as h7,instance_total_memory_used_size as memory_used from sys.m_host_resource_utilization ) on (host = h7) 
-where
-service_name = 'indexserver' and 
-host = 'bp0h01'
-order by host, port desc;
+--RSHDBSTT--Daily Monitor--
+SELECT 
+	indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
+	round((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
+	round((memory_used_cs_tables/1024/1024/1024),1) as "USED_MEMORY_CS_TABLES_GB",
+	round((memory_allocated_rs_tables/1024/1024/1024),1) as "USED_MEMORY_RS_TABLES_GB",
+	round((memory_used_rs_tables/1024/1024/1024),1) as "MEMORY_SIZE_RS_TABLES_NET_GB",
+	round((memory_allocated_rs_indexes/1024/1024/1024),1) as "USED_MEMORY_RS_INDEX_GB",
+	round(((memory_used-memory_used_cs_tables-memory_allocated_rs_tables)/1024/1024/1024),1) as "ALLOCATED_DYNAMIC_MEMORY_GB"
+FROM 
+	(select indexserver_actual_role, a.host, port, service_name from sys.m_services a left join M_landscape_host_configuration b on a.host = b.host 
+	group by indexserver_actual_role, a.host, port, service_name)
+LEFT OUTER JOIN
+	(select host as h1, port as p1, sum(memory_size_in_total) as memory_used_cs_tables  from sys.m_cs_tables group by host, port) on (host = h1 and port = p1)
+LEFT OUTER JOIN
+	(select host as h2, port as p2, sum(allocated_size) as memory_allocated_rs_tables from sys.m_rs_memory group by host, port) on (host = h2 and port = p2) 
+LEFT OUTER JOIN
+	(select host as h3, port as p3, sum(allocated_size) as memory_used_rs_tables from sys.m_rs_memory where category in ('TABLE','CATALOG')  group by host, port) on (host = h3 and port = p3)
+LEFT OUTER JOIN 
+	(select host as h4, port as p4, sum(allocated_size) as memory_allocated_rs_indexes from sys.m_rs_memory where category in ('CPBTREE','BTREE') group by host, port) on (host = h4 and port = p4) 	/*faster than sum value in m_rs_indexs*/
+LEFT OUTER JOIN 
+	(select host as h7,instance_total_memory_used_size as memory_used from sys.m_host_resource_utilization ) on (host = h7) 
+WHERE
+	service_name = 'indexserver' and host = 'bp0h01'
+ORDER BY host, port DESC;
+
+
 
 
 ---Export & Import---------------------
