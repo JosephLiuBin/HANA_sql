@@ -17,6 +17,9 @@ grant import to I302273;
 grant select on schema SAPB16 to I059567;
 grant select on schema <> to _SYS_REPO with grant option;
 grant OPTIMIZER ADMIN TO I077521;alter system
+Call "_SYS_REPO"."GRANT_ACTIVATED_ROLE"('sap.hana.xs.lm.roles::Administrator','I068208');
+Call "_SYS_REPO"."GRANT_ACTIVATED_ROLE"('sap.hana.xs.admin.roles::HTTPDestAdministrator','I068208');
+Call "_SYS_REPO"."GRANT_ACTIVATED_ROLE"('sap.hana.xs.admin.roles::RuntimeConfAdministrator','I068208');
 ------INTERNAL_USER-------------
 drop procedure CREATE_INTERNAL_USER;
 create procedure CREATE_INTERNAL_USER(IN userid nvarchar(20))
@@ -39,7 +42,7 @@ BEGIN
 END; 
 
 drop user TESTCO cascade;
-call CREATE_INTERNAL_USER('I015409');
+call CREATE_INTERNAL_USER('I068208');
 
 grant  INIFILE ADMIN to TESTCO;
 select * from users where user_name = 'I070069';
@@ -215,28 +218,30 @@ order by SERVER_TIMESTAMP desc
 select * from sys.m_rs_memory where category = 'CPBTREE' and host = 'bp0h01' and port = '30003'
 --RSHDBSTT--Daily Monitor--
 SELECT 
-	indexserver_actual_role as "SERVER_ROLE", host as "HOST", port as "PORT", service_name as "SERVICE_NAME", 
-	round((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
-	round((memory_used_cs_tables/1024/1024/1024),1) as "USED_MEMORY_CS_TABLES_GB",
-	round((memory_allocated_rs_tables/1024/1024/1024),1) as "USED_MEMORY_RS_TABLES_GB",
-	round((memory_used_rs_tables/1024/1024/1024),1) as "MEMORY_SIZE_RS_TABLES_NET_GB",
-	round((memory_allocated_rs_indexes/1024/1024/1024),1) as "USED_MEMORY_RS_INDEX_GB",
-	round(((memory_used-memory_used_cs_tables-memory_allocated_rs_tables)/1024/1024/1024),1) as "ALLOCATED_DYNAMIC_MEMORY_GB"
+  indexserver_actual_role as "SERVER_ROLE", host as "HOST", service_name as "SERVICE_NAME", 
+  round((memory_used/1024/1024/1024),1) as "USED_MEMORY_TOTAL_GB",
+  round((memory_used_cs_tables/1024/1024/1024),1) as "USED_MEMORY_CS_TABLES_GB",
+  round((memory_allocated_rs_tables/1024/1024/1024),1) as "USED_MEMORY_RS_TABLES_GB",
+  round((memory_used_rs_tables/1024/1024/1024),1) as "MEMORY_SIZE_RS_TABLES_NET_GB",
+  free_space_ratio_in_percentage||'%' as "FRAGMENTATION_RATIO",
+  round((memory_allocated_rs_indexes/1024/1024/1024),1) as "USED_MEMORY_RS_INDEX_GB",
+  round(((memory_used-memory_used_cs_tables-memory_allocated_rs_tables)/1024/1024/1024),1) as "ALLOCATED_DYNAMIC_MEMORY_GB"
 FROM 
-	(select indexserver_actual_role, a.host, port, service_name from sys.m_services a left join M_landscape_host_configuration b on a.host = b.host 
-	group by indexserver_actual_role, a.host, port, service_name)
+  (select indexserver_actual_role, a.host, port, service_name from sys.m_services a left join M_landscape_host_configuration b on a.host = b.host 
+  group by indexserver_actual_role, a.host, port, service_name)
 LEFT OUTER JOIN
-	(select host as h1, port as p1, sum(memory_size_in_total) as memory_used_cs_tables  from sys.m_cs_tables group by host, port) on (host = h1 and port = p1)
+  (select host as h1, port as p1, sum(memory_size_in_total) as memory_used_cs_tables  from sys.m_cs_tables group by host, port) on (host = h1 and port = p1)
 LEFT OUTER JOIN
-	(select host as h2, port as p2, sum(allocated_size) as memory_allocated_rs_tables from sys.m_rs_memory group by host, port) on (host = h2 and port = p2) 
+  (select host as h2, port as p2, sum(allocated_size) as memory_allocated_rs_tables from sys.m_rs_memory group by host, port) on (host = h2 and port = p2) 
 LEFT OUTER JOIN
-	(select host as h3, port as p3, sum(allocated_size) as memory_used_rs_tables from sys.m_rs_memory where category in ('TABLE','CATALOG')  group by host, port) on (host = h3 and port = p3)
+  (select host as h3, port as p3, sum(allocated_size) as memory_used_rs_tables,to_decimal( sum(free_size)*100 / sum(allocated_size), 10,2) as free_space_ratio_in_percentage
+   from sys.m_rs_memory where category in ('TABLE','CATALOG')  group by host, port) on (host = h3 and port = p3)
 LEFT OUTER JOIN 
-	(select host as h4, port as p4, sum(allocated_size) as memory_allocated_rs_indexes from sys.m_rs_memory where category in ('CPBTREE','BTREE') group by host, port) on (host = h4 and port = p4) 	/*faster than sum value in m_rs_indexs*/
+  (select host as h4, port as p4, sum(allocated_size) as memory_allocated_rs_indexes from sys.m_rs_memory where category in ('CPBTREE','BTREE') group by host, port) on (host = h4 and port = p4)   /*faster than sum value in m_rs_indexs*/
 LEFT OUTER JOIN 
-	(select host as h7,instance_total_memory_used_size as memory_used from sys.m_host_resource_utilization ) on (host = h7) 
+  (select host as h7,instance_total_memory_used_size as memory_used from sys.m_host_resource_utilization ) on (host = h7) 
 WHERE
-	service_name = 'indexserver' and host = 'bp0h01'
+  service_name = 'indexserver' and indexserver_actual_role = 'MASTER'
 ORDER BY host, port DESC;
 
 
@@ -289,7 +294,8 @@ update _SYS_STATISTICS.STATISTICS_SCHEDULE set STATUS='Inactive' where ID=5034ï»
 
 
 ------INI configuration-------------
-ALTER SYSTEM ALTER CONFIGURATION ('daemon.ini', 'host', '<host name>') SET ('xsengine','instances') = '1' WITH RECONFIGURE
+select host from m_services where service_name = 'xsengine';
+ALTER SYSTEM ALTER CONFIGURATION ('daemon.ini', 'host', 'bj50807814') SET ('scriptserver','instances') = '1' WITH RECONFIGURE
 ALTER SYSTEM ALTER CONFIGURATION ('daemon.ini', 'host', 'suse2') UNSET ('preprocessor','instances')
 alter system alter configuration ('indexserver.ini','SYSTEM') SET ('table_redist','all_moves_physical') = 'true' WITH RECONFIGURE;
 -----------------------------------
