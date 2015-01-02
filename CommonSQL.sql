@@ -295,8 +295,10 @@ update _SYS_STATISTICS.STATISTICS_SCHEDULE set STATUS='Inactive' where ID=5034ï»
 
 ------INI configuration-------------
 select host from m_services where service_name = 'xsengine';
+--host-level
 ALTER SYSTEM ALTER CONFIGURATION ('daemon.ini', 'host', 'bj50807814') SET ('scriptserver','instances') = '1' WITH RECONFIGURE
 ALTER SYSTEM ALTER CONFIGURATION ('daemon.ini', 'host', 'suse2') UNSET ('preprocessor','instances')
+--Global level
 alter system alter configuration ('indexserver.ini','SYSTEM') SET ('table_redist','all_moves_physical') = 'true' WITH RECONFIGURE;
 -----------------------------------
 select * from "_SYS_STATISTICS"."STATISTICS_ALERT_LAST_CHECK_INFORMATION"
@@ -529,6 +531,8 @@ from (
 	)
 group by host,state_name
 
+;;recovery OS command
+/*HDBSettings.sh recoverSys.py --command="RECOVER DATA ALL USING FILE ('/usr/sap/HDB/HDB01/backup/data/backup_HDB_COUNT_1') CLEAR LOG" --wait */
 
 -----CONNECTIONS-----------------------
 select C.HOST, C.CONNECTION_ID,C.CLIENT_PID,PS.STATEMENT_STRING
