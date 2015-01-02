@@ -44,13 +44,12 @@ FROM
                     'HOUR',        'YYYY/MM/DD HH24',
                     'DAY',         'YYYY/MM/DD (DY)',
                     'HOUR_OF_DAY', 'HH24',
-                    TIME_AGGREGATE_BY ) TIME_AGGREGATE_BY,
-                  INCLUDE_OVERLAPPING_HEAP_AREAS
+                    TIME_AGGREGATE_BY ) TIME_AGGREGATE_BY
              FROM
                 ( SELECT                                                      /* Modification section */
                       TO_TIMESTAMP('1000/01/01 01:00:00', 'YYYY/MM/DD HH24:MI:SS') BEGIN_TIME,
                       TO_TIMESTAMP('9999/12/31 23:59:00', 'YYYY/MM/DD HH24:MI:SS') END_TIME,
-                      'hana01' HOST,
+                      'bp0h01' HOST,
                       '30003' PORT,
                       '%' SCHEMA_NAME,
                       '%' AREA,                     /* ROW, COLUMN, ONLY_TABLES, HEAP, % */
@@ -58,8 +57,7 @@ FROM
                       'AREA' AGGREGATE_BY,        /* SCHEMA_NAME, DETAIL, HOST, PORT, AREA */
                       'USED' KEY_FIGURE,       /* ALLOCATED, USED, MAIN, DELTA, MERGES, ROWS */ 
                       'TABLE' OBJECT_LEVEL,         /* TABLE, PARTITION */
-                      ' ' INCLUDE_OVERLAPPING_HEAP_AREAS,     /* Consider heap areas like Pool/malloc/libhdbbasement.so although they overlap with table information */
-                      'DAY' TIME_AGGREGATE_BY      /* HOUR, DAY, HOUR_OF_DAY or database time pattern, NONE for no aggregation */
+                       'DAY' TIME_AGGREGATE_BY      /* HOUR, DAY, HOUR_OF_DAY or database time pattern, NONE for no aggregation */
                     FROM
                       DUMMY
                )
@@ -106,19 +104,7 @@ FROM
                  HA.EXCLUSIVE_SIZE_IN_USE
                FROM
                  _SYS_STATISTICS.HOST_HEAP_ALLOCATORS HA
-             )
-           ) D
-            WHERE
-              D.SCHEMA_NAME LIKE BI.SCHEMA_NAME AND
-              D.DETAIL LIKE BI.DETAIL AND
-              D.HOST LIKE BI.HOST AND
-              TO_CHAR(D.PORT) LIKE BI.PORT AND
-              D.SERVER_TIMESTAMP BETWEEN BI.BEGIN_TIME AND BI.END_TIME AND
-              D.AREA LIKE BI.AREA AND
-              ( BI.AREA = 'ONLY_TABLES' AND D.AREA IN ('ROW', 'COLUMN') OR
-                'HEAP' NOT LIKE BI.AREA OR
-                ( BI.INCLUDE_OVERLAPPING_HEAP_AREAS = 'X' OR
-                  D.DETAIL NOT IN 
+               WHERE HA.CATEGORY NOT IN 
                   ( 'Pool/AttributeEngine',
                     'Pool/AttributeEngine/Delta',
                     'Pool/AttributeEngine/Delta/BtreeDictionary',
@@ -139,10 +125,40 @@ FROM
                     'Pool/malloc/libhdbcs.so', 
                     'Pool/NameIdMapping/RoDict',
                     'Pool/RowEngine/CpbTree',
+                    'Pool/RowEngine/BTree',
                     'StackAllocator'
                   )
-                ) 
-              )
+             )
+             --Start Add
+              UNION ALL
+             ( SELECT
+                 'ROW_INDEX' AREA,
+                 HA.SERVER_TIMESTAMP,
+                 ' ' SCHEMA_NAME,
+                 HA.CATEGORY,
+                 0 PART_ID,
+                 HA.HOST,
+                 HA.PORT,
+                 HA.EXCLUSIVE_ALLOCATED_COUNT NUM_ROWS,
+                 HA.EXCLUSIVE_ALLOCATED_SIZE,
+                 HA.EXCLUSIVE_SIZE_IN_USE
+               FROM
+                 _SYS_STATISTICS.HOST_HEAP_ALLOCATORS HA
+               WHERE 
+                HA.CATEGORY like 'Pool/RowEngine/%Tree'
+             )
+             --End Add 
+           ) D
+            WHERE
+              D.SCHEMA_NAME LIKE BI.SCHEMA_NAME AND
+              D.DETAIL LIKE BI.DETAIL AND
+              D.HOST LIKE BI.HOST AND
+              TO_CHAR(D.PORT) LIKE BI.PORT AND
+              D.SERVER_TIMESTAMP BETWEEN BI.BEGIN_TIME AND BI.END_TIME AND
+              D.AREA LIKE BI.AREA /*AND
+              ( BI.AREA = 'ONLY_TABLES' AND D.AREA IN ('ROW', 'COLUMN') OR
+                'HEAP' NOT LIKE BI.AREA 
+              )*/
           )
         WHERE
             KEY_FIGURE > 0
