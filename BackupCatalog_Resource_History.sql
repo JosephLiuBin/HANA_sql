@@ -6,13 +6,14 @@ SELECT
 FROM 
 	(SELECT	
 		BACKUP_ID,
-		TO_CHAR(SYS_START_TIME,'YYYY/MM/DD (DY)') AS DAY,
+		TO_CHAR(SYS_START_TIME,'YYYY/MM/DD') AS DAY,
+		TO_CHAR(ADD_DAYS(SYS_START_TIME,1),'YYYY/MM/DD') AS DAY_PLUS_ONE,
 		STATE_NAME,
 		ENTRY_TYPE_NAME
 	FROM M_BACKUP_CATALOG 
 	WHERE 
-	ENTRY_TYPE_NAME = 'complete data backup' AND 
-	STATE_NAME = 'successful'	/*Only successful data backup will be calculated*/
+		ENTRY_TYPE_NAME = 'complete data backup' AND 
+		STATE_NAME = 'successful' /*Only successful data backup will be calculated*/
 	) C
 	JOIN 
 	(SELECT 
@@ -29,6 +30,8 @@ FROM
 		BACKUP_ID
 	) F
 	ON C.BACKUP_ID = F.BACKUP_ID 
+WHERE
+	DAY_PLUS_ONE = TO_CHAR(current_date,'YYYY/MM/DD') 
 ORDER BY DAY DESC,HOST
 LIMIT 16
 
