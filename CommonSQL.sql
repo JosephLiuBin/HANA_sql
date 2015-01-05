@@ -44,6 +44,14 @@ END;
 drop user TESTCO cascade;
 call CREATE_INTERNAL_USER('I068208');
 
+
+--USER LIST
+select user_name
+from users
+where 
+	length(user_name) = 7 and 
+	(user_name like 'I%' or user_name like 'D%')
+--------
 grant  INIFILE ADMIN to TESTCO;
 select * from users where user_name = 'I070069';
 alter user I310839 password Initial1234;
