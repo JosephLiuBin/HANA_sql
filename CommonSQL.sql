@@ -527,10 +527,10 @@ from (
 	on c.backup_id = f.backup_id 
 	where 
 	c.entry_type_name = 'log backup' and --'complete data backup'  and
-	SYS_START_TIME > '2014-10-20 20:16' and 
-	--SYS_START_TIME < '2014-09-06 14:16'
---and F.host = 'hana01'
---	c.backup_id = 1413688792636 and 
+	--SYS_START_TIME > '2015-02-27 10:16' and 	--SYS_START_TIME < '2014-09-06 10:16'
+	--and F.host = 'hana01'
+	--	c.backup_id = 1413688792636 and 
+	FIRST_REDO_LOG_POSITION = 204346814080 AND 
 	destination_path like '/backup/log%' and 
 	--destination_type_name = 'backint'
 	destination_type_name = 'file'
